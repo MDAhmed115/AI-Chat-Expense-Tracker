@@ -1,0 +1,14 @@
+{
+  "name": "finance-ai-v3",
+  "version": "3.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite src --host 0.0.0.0",
+    "build": "vite build src --outDir ../dist --emptyOutDir",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
