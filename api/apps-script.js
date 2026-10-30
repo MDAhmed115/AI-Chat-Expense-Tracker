@@ -11,9 +11,22 @@ const APPS_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbxBLlVD844zKFWg1B_FFa9s5LLCRbs0jcouuMFprjqoLNacHrBSjbOlGskZMCb6sWxR/exec';
 
 export default async function handler(req, res) {
+  // GET Health Check endpoint for quick deployment verification
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      ok: true,
+      message: 'Expense Chat API route is deployed.',
+      endpoint: '/api/apps-script',
+      method: 'POST'
+    });
+  }
+
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ ok: false, message: 'Method not allowed.' });
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({
+      ok: false,
+      message: 'Method not allowed.'
+    });
   }
 
   const secret = process.env.APPS_SCRIPT_API_SECRET;
