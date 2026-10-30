@@ -90,6 +90,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         action: payload.action,
         args: payload.args,
+        userApiKey: payload.userApiKey || '',
+        userSheetUrl: payload.userSheetUrl || '',
         secret: secret
       }),
       redirect: 'follow'
@@ -103,7 +105,7 @@ export default async function handler(req, res) {
     try {
       finalHost = new URL(upstream.url).hostname;
     } catch {
-      // Keep the diagnostic host as unknown.
+      // Keep diagnostic host as unknown
     }
 
     console.log('[Apps Script Proxy] Upstream response:', {
