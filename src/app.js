@@ -42,7 +42,7 @@
     dot: $('statusDot'), statusText: $('statusText'), overlay: $('overlay'),
     viewKey: $('view-key'), viewSheet: $('view-sheet'),
     keyForm: $('keyForm'), keyInput: $('keyInput'), keySave: $('keySave'), keyBack: $('keyBack'), keyMsg: $('keyMsg'),
-    createBtn: $('createBtn'), haveBtn: $('haveBtn'), linkForm: $('linkForm'), sheetInput: $('sheetInput'),
+    downloadTemplateBtn: $('downloadTemplateBtn'), templateGuide: $('templateGuide'), haveBtn: $('haveBtn'), linkForm: $('linkForm'), sheetInput: $('sheetInput'),
     linkBtn: $('linkBtn'), sheetBack: $('sheetBack'), sheetMsg: $('sheetMsg'),
     setKey: $('setKey'), setSheet: $('setSheet'), sheetLink: $('sheetLink'),
     changeKey: $('changeKey'), changeSheet: $('changeSheet'), removeBtn: $('removeBtn'),
@@ -1147,21 +1147,10 @@
     });
   }
 
-  if (el.createBtn) {
-    el.createBtn.addEventListener('click', function () {
-      el.createBtn.disabled = true;
-      setMsg(el.sheetMsg, 'Creating your Sheet...');
-      callServer('api_createSheet').then(function (res) {
-        el.createBtn.disabled = false;
-        if (res && res.ok && res.id) {
-          saveCredentials(null, res.id);       // stored in THIS browser only
-          setMsg(el.sheetMsg, '');
-          chatList = [];
-          refreshStatus().then(function () { routeSetup(); renderHistory(); });
-        } else {
-          setMsg(el.sheetMsg, (res && res.message) || 'Could not create the Sheet.', true);
-        }
-      }).catch(function () { el.createBtn.disabled = false; setMsg(el.sheetMsg, SERVER_ERR, true); });
+  if (el.downloadTemplateBtn) {
+    el.downloadTemplateBtn.addEventListener('click', function () {
+      if (el.templateGuide) el.templateGuide.classList.remove('hidden');
+      setMsg(el.sheetMsg, 'Template download started. Follow the steps below before selecting your Sheet.');
     });
   }
 

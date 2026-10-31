@@ -186,8 +186,19 @@
           <h2>Set up your Sheet</h2>
           <p class="sub-text">Your transactions are saved in a Google Sheet in your Drive.</p>
           <div class="btn-col">
-            <button type="button" class="glass-btn primary" id="createBtn">Create my Sheet</button>
-            <button type="button" class="glass-btn" id="haveBtn">Select my existing Sheet</button>
+            <a class="glass-btn primary" id="downloadTemplateBtn" href="https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/raw/refs/heads/main/Finance_Tracker-template.xlsx" download="Expense-Chat-Template.xlsx" style="display:flex;align-items:center;justify-content:center;text-align:center;">Download Template</a>
+            <button type="button" class="glass-btn" id="haveBtn">Select my Google Sheet</button>
+          </div>
+          <div class="template-guide hidden" id="templateGuide" role="status" aria-live="polite">
+            <strong>Almost there — add the template to your Google Drive</strong>
+            <ol>
+              <li>Download the Excel template to your device.</li>
+              <li>Open <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Google Drive</a> using the same Google account you connected above.</li>
+              <li>Select <strong>New → File upload</strong> and upload the downloaded <strong>Expense-Chat-Template.xlsx</strong>.</li>
+              <li>After uploading, right-click the file and choose <strong>Open with → Google Sheets</strong>. If prompted, save or convert it as a Google Sheets file.</li>
+              <li>Return here and click <strong>Select my Google Sheet</strong>. Choose the converted spreadsheet.</li>
+            </ol>
+            <p>Once linked, Expense Chat can use that spreadsheet to store your transactions, budgets, and chat history.</p>
           </div>
           <form class="hidden" id="linkForm" style="margin-top: 12px;" autocomplete="off">
             <div class="field-box">
