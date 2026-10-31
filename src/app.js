@@ -1065,9 +1065,13 @@
       hideTyping();
       if (stillLive) showResult(res, item);
       afterReply(item, res, stillLive);
-    }).catch(function () {
+    }).catch(function (error) {
       hideTyping();
-      if (isLive(item)) addBot(SERVER_ERR, 'error', item);
+      console.error('Expense Chat request failed:', error);
+      if (isLive(item)) {
+        var message = error && error.message ? error.message : SERVER_ERR;
+        addBot(message, 'error', item);
+      }
     }).then(function () {
       item.files = null;   // free the memory
       working = false;
