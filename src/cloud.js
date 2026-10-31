@@ -183,7 +183,7 @@ const monthName = m => new Date(2000, m - 1, 1).toLocaleString('en', { month: 'l
 async function gemini(prompt, { json = false, files = [], history = [], search = false } = {}) {
   const key = readCreds().apiKey;
   if (!key) throw new Error('Add your Gemini API key in Settings.');
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-3.5-flash-lite', 'gemma-4-26B-A4B'];
   let last;
   const modes = json ? [true, false] : [false];
   const searchModes = search ? [true, false] : [false];
