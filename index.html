@@ -7,20 +7,20 @@
     <meta name="theme-color" content="#F5EFE3">
     <title>Expense Chat</title>
 
-    <!-- App icon -->
-    <link rel="icon" type="image/png" href="[https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png](https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png)">
-    <link rel="apple-touch-icon" href="[https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png](https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png)">
+    <!-- App icon (also set with setFaviconUrl in Main.gs, which is what Apps Script uses for the browser tab) -->
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png">
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
-    <link rel="stylesheet" href="[https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap](https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap)">
-    <noscript><link rel="stylesheet" href="[https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap](https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap)"></noscript>
+    <!-- Fonts load without blocking the page. If they cannot load, system fonts are used. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap" >
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Syne:wght@600;700&display=swap"></noscript>
 
     <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body>
-    <!-- Background glow -->
+    <!-- Background glow (gradients only, no blur filter) -->
     <div class="ambient-bg" aria-hidden="true">
       <div class="ambient-blob blob-1"></div>
       <div class="ambient-blob blob-2"></div>
@@ -29,7 +29,7 @@
 
     <!-- Startup splash -->
     <div class="splash" id="splash" role="status" aria-label="Loading Expense Chat">
-      <img class="splash-logo" src="[https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png](https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png)" alt="" width="108" height="108" decoding="async">
+      <img class="splash-logo" src="https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png" alt="" width="108" height="108" decoding="async">
       <div class="splash-title">Expense Chat</div>
       <p class="splash-sub">Finance Manager + General Chatbot</p>
       <div class="splash-bar" aria-hidden="true"></div>
@@ -40,7 +40,7 @@
       <aside class="sidebar custom-scroll" id="sidebar" aria-label="Menu">
         <div class="side-head">
           <span class="brand">
-            <img class="brand-logo" src="[https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png](https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png)" alt="" width="30" height="30" decoding="async">
+            <img class="brand-logo" src="https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png" alt="" width="30" height="30" decoding="async">
             Expense Chat
           </span>
           <button type="button" class="icon-btn" id="closeSide" aria-label="Close menu">
@@ -66,7 +66,7 @@
           </div>
         </section>
 
-        <!-- Chat history -->
+        <!-- Chat history: both modes, pinned on top -->
         <section>
           <p class="side-label">Chats</p>
           <button type="button" class="glass-btn new-chat-btn" id="newChatBtn">+ New chat</button>
@@ -102,7 +102,6 @@
         <section>
           <p class="side-label">Settings</p>
           <div class="btn-col">
-            <button type="button" class="glass-btn" id="changeGoogle">Change Google account</button>
             <button type="button" class="glass-btn" id="changeKey">Change AI key</button>
             <button type="button" class="glass-btn" id="changeSheet">Change Sheet</button>
             <button type="button" class="glass-btn danger" id="removeBtn">Remove saved key and Sheet link</button>
@@ -129,10 +128,11 @@
         </header>
 
         <div class="chat-view fresh-session" id="chatContainer">
+          <!-- One window: it shows the open thread of the current mode -->
           <main class="messages-area custom-scroll" id="messages" aria-live="polite"></main>
 
           <div class="composer-container">
-            <img class="hero-logo" src="[https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png](https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png)" alt="" width="76" height="76" decoding="async">
+            <img class="hero-logo" src="https://raw.githubusercontent.com/MDAhmed115/AI-Chat-Expense-Tracker/main/logo.png" alt="" width="76" height="76" decoding="async">
             <div class="hero-prompt-text" id="heroText">What did you spend today?</div>
             <p class="composer-msg hidden" id="composerMsg" role="status"></p>
             <div class="attach-chips hidden" id="attachChips"></div>
@@ -159,158 +159,65 @@
     <!-- Setup sheet -->
     <section class="modal-overlay hidden" id="overlay">
       <div class="modal-sheet">
-
-        <!-- Step 1: Google account -->
-        <div class="view hidden" id="view-google">
-          <p class="step-tag">Step 1 of 3</p>
-          <h2>Connect your Google account</h2>
-          <p class="sub-text">
-            Connect the Google account that owns or will store your Expense Chat spreadsheet.
-            You can change this account later in Settings.
-          </p>
-
-          <button type="button" class="glass-btn primary" id="googleConnect">
-            Connect Google account
-          </button>
-
-          <p class="status-line" id="googleMsg" role="status" aria-live="polite"></p>
-        </div>
-
-        <!-- Step 2: Gemini API key -->
         <div class="view hidden" id="view-key">
-          <p class="step-tag">Step 2 of 3</p>
-          <h2>Add your Gemini API key</h2>
-
-          <p class="sub-text">
-            Create a free key at
-            <a href="[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)" target="_blank" rel="noopener">
-              Google AI Studio
-            </a>,
-            then paste it below. The key is validated before it is saved in this browser.
-          </p>
-
+          <p class="step-tag">Step 1 of 2</p>
+          <h2>Connect your Google account</h2>
+          <p class="sub-text">Your Google account is used only to access the spreadsheet you create or select. Your access token stays in memory.</p>
+          <button type="button" class="glass-btn primary" id="googleConnect">Connect Google account</button>
+          <p class="status-line" id="googleMsg"></p>
+          <h2>Add your AI key</h2>
+          <p class="sub-text">The chat uses Google's AI to read your messages. Create a free key at
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>,
+            then paste it here.</p>
           <form id="keyForm" autocomplete="off">
             <div class="field-box">
-              <input
-                id="keyInput"
-                type="password"
-                placeholder="Paste your Gemini API key"
-                aria-label="Gemini API key"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-              >
+              <input id="keyInput" type="password" placeholder="Paste your AI key" aria-label="AI key" autocomplete="off" autocapitalize="none" spellcheck="false">
             </div>
-
             <div class="action-row">
-              <button type="button" class="glass-btn" id="keyBack">
-                Back
-              </button>
-
-              <button type="submit" class="glass-btn primary" id="keySave">
-                Validate and save key
-              </button>
+              <button type="button" class="glass-btn hidden" id="keyBack">Cancel</button>
+              <button type="submit" class="glass-btn primary" id="keySave">Save key</button>
             </div>
           </form>
-
-          <p class="status-line" id="keyMsg" role="status" aria-live="polite"></p>
+          <p class="status-line" id="keyMsg"></p>
         </div>
 
-        <!-- Step 3: Google Sheet -->
         <div class="view hidden" id="view-sheet">
-          <p class="step-tag">Step 3 of 3</p>
-          <h2>Connect your Google Sheet</h2>
-
-          <p class="sub-text">
-            Choose an existing Expense Chat template spreadsheet in your connected
-            Google account, or download and upload the template first.
-          </p>
-
+          <p class="step-tag">Step 2 of 2</p>
+          <h2>Set up your Sheet</h2>
+          <p class="sub-text">Your transactions are saved in a Google Sheet in your Drive.</p>
           <div class="btn-col">
-            <a
-              class="glass-btn primary"
-              id="downloadTemplateBtn"
-              href="[https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/raw/refs/heads/main/Finance_Tracker-template.xlsx](https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/raw/refs/heads/main/Finance_Tracker-template.xlsx)"
-              download="Expense-Chat-Template.xlsx"
-              style="display:flex;align-items:center;justify-content:center;text-align:center;"
-            >
-              Download Template
-            </a>
-
-            <button type="button" class="glass-btn" id="haveBtn">
-              Select my Google Sheet
-            </button>
+            <a class="glass-btn primary" id="downloadTemplateBtn" href="https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/raw/refs/heads/main/Finance_Tracker-template.xlsx" download="Expense-Chat-Template.xlsx" style="display:flex;align-items:center;justify-content:center;text-align:center;">Download Template</a>
+            <button type="button" class="glass-btn" id="haveBtn">Select my Google Sheet</button>
           </div>
-
           <div class="template-guide hidden" id="templateGuide" role="status" aria-live="polite">
-            <strong>Upload and convert the template in Google Drive</strong>
-
+            <strong>Almost there — add the template to your Google Drive</strong>
             <ol>
               <li>Download the Excel template to your device.</li>
-              <li>
-                Open
-                <a href="[https://drive.google.com/drive/my-drive](https://drive.google.com/drive/my-drive)" target="_blank" rel="noopener">
-                  Google Drive
-                </a>
-                using the Google account connected in Step 1.
-              </li>
-              <li>
-                Select <strong>New → File upload</strong> and upload
-                <strong>Expense-Chat-Template.xlsx</strong>.
-              </li>
-              <li>
-                Right-click the uploaded file and choose
-                <strong>Open with → Google Sheets</strong>.
-                Complete the conversion if prompted.
-              </li>
-              <li>
-                Return here and click <strong>Select my Google Sheet</strong>.
-                Choose the converted spreadsheet.
-              </li>
+              <li>Open <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Google Drive</a> using the same Google account you connected above.</li>
+              <li>Select <strong>New → File upload</strong> and upload the downloaded <strong>Expense-Chat-Template.xlsx</strong>.</li>
+              <li>After uploading, right-click the file and choose <strong>Open with → Google Sheets</strong>. If prompted, save or convert it as a Google Sheets file.</li>
+              <li>Return here and click <strong>Select my Google Sheet</strong>. Choose the converted spreadsheet.</li>
             </ol>
-
-            <p>
-              Expense Chat validates the required tabs before linking the spreadsheet.
-            </p>
+            <p>Once linked, Expense Chat can use that spreadsheet to store your transactions, budgets, and chat history.</p>
           </div>
-
-          <p class="sub-text" style="margin-top:18px;">
-            Or paste an existing Google Sheet link:
-          </p>
-
-          <form id="linkForm" style="margin-top:12px;" autocomplete="off">
+          <form class="hidden" id="linkForm" style="margin-top: 12px;" autocomplete="off">
             <div class="field-box">
-              <input
-                id="sheetInput"
-                type="text"
-                placeholder="Paste your Google Sheet URL"
-                aria-label="Google Sheet URL"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-              >
+              <input id="sheetInput" type="text" placeholder="Paste your Sheet link" aria-label="Sheet link" autocomplete="off" autocapitalize="none" spellcheck="false">
             </div>
-
             <div class="action-row">
-              <button type="submit" class="glass-btn primary" id="linkBtn">
-                Validate and link Sheet
-              </button>
+              <button type="submit" class="glass-btn primary" id="linkBtn">Link Sheet</button>
             </div>
           </form>
-
-          <p class="status-line" id="sheetMsg" role="status" aria-live="polite"></p>
-
+          <p class="status-line" id="sheetMsg"></p>
           <div class="action-row">
-            <button type="button" class="glass-btn" id="sheetBack">
-              Back
-            </button>
+            <button type="button" class="glass-btn hidden" id="sheetBack">Cancel</button>
           </div>
         </div>
-
       </div>
     </section>
 
-    <script src="[https://apis.google.com/js/api.js](https://apis.google.com/js/api.js)" async defer></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
