@@ -21,6 +21,8 @@ const WHITE = { red: 1, green: 1, blue: 1 };
 const TEXT_DARK = { red: 0.13, green: 0.13, blue: 0.13 };
 const REVIEW_BG = { red: 0.976, green: 0.796, blue: 0.612 };
 let legacyRowsFixed = false;
+const searchBlocked = {};      // model -> time until which its search is skipped (quota hit)
+const modelGone = new Set();   // models this key cannot use at all
 
 const readCreds = () => ({
   apiKey: localStorage.getItem(STORE.key) || '',
@@ -251,41 +253,63 @@ const monthName = m => new Date(2000, m - 1, 1).toLocaleString('en', { month: 'l
 async function gemini(prompt, { json = false, files = [], history = [], search = false, meta = null } = {}) {
   const key = readCreds().apiKey;
   if (!key) throw new Error('Add your Gemini API key in Settings.');
-  const models = ['gemini-3.5-flash-lite', 'gemma-4-26B-A4B'];
+  // Order matters: the first model that works answers. Gemma has no search tool, so it is last and never searches.
+  const models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemma-4-26B-A4B'];
   const problems = [];
-  const searchProblems = [];
-  const toolVariants = search ? ['google_search', 'googleSearch', null] : [null];
   const jsonModes = json ? [true, false] : [false];
-  for (const model of models) {
-    for (const tool of toolVariants) {
-      if (tool && /^gemma/i.test(model)) continue; // Gemma has no Google Search tool
-      for (const useJson of jsonModes) {
-        const contents = [];
-        for (const item of history) contents.push({ role: item.role === 'user' ? 'user' : 'model', parts: [{ text: String(item.text || '') }] });
-        contents.push({ role: 'user', parts: [{ text: prompt }, ...files] });
-        const body = { contents, generationConfig: { temperature: 0.2, ...(useJson ? { responseMimeType: 'application/json' } : {}) } };
-        if (tool) body.tools = [{ [tool]: {} }];
-        const label = `${model}${tool ? ' + search (' + tool + ')' : ''}`;
-        const fail = msg => { const m = `${label}: ${msg}`; problems.push(m); if (tool) searchProblems.push(m); };
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-          });
-          const data = await response.json();
-          if (!response.ok) { fail(data.error?.message || 'error ' + response.status); continue; }
-          const cand = data.candidates?.[0];
-          const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('\n').trim();
-          if (!text) { fail(`empty answer (${data.promptFeedback?.blockReason || cand?.finishReason || 'no reason given'})`); continue; }
-          if (meta) {
-            meta.grounded = !!tool;
-            meta.searchProblems = searchProblems;
-            meta.sources = (cand?.groundingMetadata?.groundingChunks || [])
-              .map(c => c.web).filter(w => w && w.uri).slice(0, 5)
-              .map(w => ({ title: w.title || 'Source', uri: w.uri }));
-          }
-          return text;
-        } catch (e) { fail(e.message); }
+  const attempt = async (model, tool, useJson) => {
+    const contents = [];
+    for (const item of history) contents.push({ role: item.role === 'user' ? 'user' : 'model', parts: [{ text: String(item.text || '') }] });
+    contents.push({ role: 'user', parts: [{ text: prompt }, ...files] });
+    const body = { contents, generationConfig: { temperature: 0.2, ...(useJson ? { responseMimeType: 'application/json' } : {}) } };
+    if (tool) body.tools = [{ [tool]: {} }];
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok) return { error: data.error?.message || 'error ' + response.status, status: response.status };
+    const cand = data.candidates?.[0];
+    const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('\n').trim();
+    if (!text) return { error: `empty answer (${data.promptFeedback?.blockReason || cand?.finishReason || 'no reason given'})` };
+    return { text, cand };
+  };
+  const finish = (r, tool) => {
+    if (meta) {
+      meta.grounded = !!tool;
+      meta.sources = (r.cand?.groundingMetadata?.groundingChunks || [])
+        .map(c => c.web).filter(w => w && w.uri).slice(0, 5)
+        .map(w => ({ title: w.title || 'Source', uri: w.uri }));
+    }
+    return r.text;
+  };
+  const isGone = r => r.status === 404 || /not found|not supported for generateContent|no access/i.test(r.error || '');
+  const isQuota = r => r.status === 429 || /quota|exceed|rate/i.test(r.error || '');
+
+  // Pass 1: every model that can search, in order.
+  if (search) {
+    for (const model of models) {
+      if (/^gemma/i.test(model) || modelGone.has(model)) continue;
+      if (Date.now() < (searchBlocked[model] || 0)) continue;
+      for (const tool of ['google_search', 'googleSearch']) {
+        let r;
+        try { r = await attempt(model, tool, false); } catch (e) { r = { error: e.message }; }
+        if (r.text) return finish(r, tool);
+        problems.push(`${model} + search: ${r.error}`);
+        if (isGone(r)) { modelGone.add(model); break; }
+        if (isQuota(r)) { searchBlocked[model] = Date.now() + 30 * 60 * 1000; break; }
       }
+    }
+  }
+
+  // Pass 2: plain answer, every model in order (search skipped or failed everywhere).
+  for (const model of models) {
+    if (modelGone.has(model)) continue;
+    for (const useJson of jsonModes) {
+      let r;
+      try { r = await attempt(model, null, useJson); } catch (e) { r = { error: e.message }; }
+      if (r.text) return finish(r, null);
+      problems.push(`${model}: ${r.error}`);
+      if (isGone(r)) { modelGone.add(model); break; }
     }
   }
   throw new Error('No model could answer. ' + problems.slice(-3).join(' | '));
@@ -657,17 +681,16 @@ async function chatReply(text, history, files = []) {
       if (extracted) attachments.push({ text: `Attachment ${f.name || ''}:\n${extracted.slice(0, 60000)}` });
     }
   }
-  const prompt = `You are the General Chatbot in Expense Chat. Answer clearly and accurately. For anything current, recent or factual that could have changed, use Google Search. User message: ${text}`;
+  const prompt = `You are the General Chatbot in Expense Chat. Answer clearly and accurately. Do not mention tools, searching or your own limitations unless the user asks. User message: ${text}`;
   const meta = {};
   let answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: true, meta });
+  const NEEDS_LIVE = /\b(today|tonight|now|current|currently|latest|recent|news|weather|price|score|results?|who won|trending|popular|this (week|month|year)|20(2[5-9]|3\d))\b/i;
   if (meta.grounded && meta.sources?.length) {
     answer += '\n\nSources:\n' + meta.sources.map(s => `- ${s.title}: ${s.uri}`).join('\n');
-    } else if (!meta.grounded) {
-    const why = (meta.searchProblems && meta.searchProblems[0]) || 'no reason returned';
-    answer = `(Web search failed: ${String(why).slice(0, 300)})\n\n` + answer;
+  } else if (!meta.grounded && NEEDS_LIVE.test(text)) {
+    answer = '(Live search is unavailable right now, so this may be out of date.)\n\n' + answer;
   }
   return { ok: true, kind: 'chat', reply: answer };
-}
 
 async function saveExtracted(rows) {
   const lists = await loadLists(); const values = [];
