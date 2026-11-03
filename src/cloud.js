@@ -14,6 +14,13 @@ let tokenClient = null;
 let pickerReady = false;
 let currentLists = null;
 let pendingClearUntil = 0;
+let transactionsGid = null;
+
+// Row colours for new entries: normal rows are white with dark text, review rows are orange with dark text.
+const WHITE = { red: 1, green: 1, blue: 1 };
+const TEXT_DARK = { red: 0.13, green: 0.13, blue: 0.13 };
+const REVIEW_BG = { red: 0.976, green: 0.796, blue: 0.612 };
+let legacyRowsFixed = false;
 
 const readCreds = () => ({
   apiKey: localStorage.getItem(STORE.key) || '',
@@ -138,6 +145,65 @@ async function validateSheet(id) {
   return { id, url: meta.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${id}/edit`, names };
 }
 
+/* ---------- Row formatting (real dates, readable colours) ---------- */
+async function getTransactionsGid() {
+  if (transactionsGid !== null) return transactionsGid;
+  const meta = await metadata();
+  const sheet = (meta.sheets || []).find(s => s.properties.title === 'Transactions');
+  if (!sheet) throw new Error('Transactions tab not found.');
+  transactionsGid = sheet.properties.sheetId;
+  return transactionsGid;
+}
+
+function rangeRows(updatedRange) {
+  const m = String(updatedRange || '').match(/!([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?/);
+  if (!m) return null;
+  const start = Number(m[2]);
+  const end = m[4] ? Number(m[4]) : start;
+  return { start, end };
+}
+
+/* Normal rows: white fill + dark text. Review rows: orange fill + dark text.
+   Date column: always a real date format. The header row (row 1) is never touched. */
+async function formatTransactionRows(startRow, endRow, review) {
+  if (!startRow || !endRow) return;
+  try {
+    const sheetId = await getTransactionsGid();
+    const area = (c0, c1, r0, r1) => ({ sheetId, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+    const paint = (range, bg) => ({
+      repeatCell: {
+        range,
+        cell: { userEnteredFormat: { backgroundColor: bg, textFormat: { foregroundColor: TEXT_DARK } } },
+        fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat.foregroundColor'
+      }
+    });
+    const dateFmt = range => ({
+      repeatCell: {
+        range,
+        cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } },
+        fields: 'userEnteredFormat.numberFormat'
+      }
+    });
+
+    const requests = [];
+
+    // One-time cleanup of old navy rows and numeric dates (row 2 downward only).
+    if (!legacyRowsFixed) {
+      requests.push(paint(area(0, 9, 1, 2000), WHITE));
+      requests.push(dateFmt(area(0, 1, 1, 2000)));
+      legacyRowsFixed = true;
+    }
+
+    // This row's own colour (applied last so review rows stay orange).
+    requests.push(paint(area(0, 9, startRow - 1, endRow), review ? REVIEW_BG : WHITE));
+    requests.push(dateFmt(area(0, 1, startRow - 1, endRow)));
+
+    await googleFetch(`${apiBase(readCreds().sheetId)}:batchUpdate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests })
+    });
+  } catch (e) { console.warn('Could not format the new row:', e); }
+}
+
 async function ensureHiddenTabs() {
   const meta = await metadata();
   const existing = new Set((meta.sheets || []).map(s => s.properties.title));
@@ -180,20 +246,21 @@ const dateIso = v => {
 const dateParts = iso => { const [y, m, d] = iso.split('-').map(Number); return { y, m, d }; };
 const monthName = m => new Date(2000, m - 1, 1).toLocaleString('en', { month: 'long' });
 
-async function gemini(prompt, { json = false, files = [], history = [], search = false } = {}) {
+/* Tries each model in order. An empty answer counts as a failure and moves on to the next option.
+   Gemma has no Google Search tool, so it is only used without search. */
+async function gemini(prompt, { json = false, files = [], history = [], search = false, meta = null } = {}) {
   const key = readCreds().apiKey;
   if (!key) throw new Error('Add your Gemini API key in Settings.');
   const models = ['gemini-3.5-flash-lite', 'gemma-4-26B-A4B'];
-  let last;
-  const modes = json ? [true, false] : [false];
+  const problems = [];
   const searchModes = search ? [true, false] : [false];
+  const jsonModes = json ? [true, false] : [false];
   for (const model of models) {
     for (const useSearch of searchModes) {
-      for (const useJson of modes) {
+      if (useSearch && /^gemma/i.test(model)) continue;
+      for (const useJson of jsonModes) {
         const contents = [];
-        if (history.length) {
-          for (const item of history) contents.push({ role: item.role === 'user' ? 'user' : 'model', parts: [{ text: String(item.text || '') }] });
-        }
+        for (const item of history) contents.push({ role: item.role === 'user' ? 'user' : 'model', parts: [{ text: String(item.text || '') }] });
         contents.push({ role: 'user', parts: [{ text: prompt }, ...files] });
         const body = { contents, generationConfig: { temperature: 0.2, ...(useJson ? { responseMimeType: 'application/json' } : {}) } };
         if (useSearch) body.tools = [{ google_search: {} }];
@@ -202,17 +269,25 @@ async function gemini(prompt, { json = false, files = [], history = [], search =
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
           });
           const data = await response.json();
-          if (!response.ok) {
-            last = new Error(data.error?.message || `Gemini error (${response.status})`);
-            if (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500) continue;
-            throw last;
+          if (!response.ok) { problems.push(`${model}${useSearch ? ' + search' : ''}: ${data.error?.message || 'error ' + response.status}`); continue; }
+          const cand = data.candidates?.[0];
+          const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('\n').trim();
+          if (!text) {
+            problems.push(`${model}${useSearch ? ' + search' : ''}: empty answer (${data.promptFeedback?.blockReason || cand?.finishReason || 'no reason given'})`);
+            continue;
           }
-          return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('\n').trim();
-        } catch (e) { last = e; }
+          if (meta) {
+            meta.grounded = useSearch;
+            meta.sources = (cand?.groundingMetadata?.groundingChunks || [])
+              .map(c => c.web).filter(w => w && w.uri).slice(0, 5)
+              .map(w => ({ title: w.title || 'Source', uri: w.uri }));
+          }
+          return text;
+        } catch (e) { problems.push(`${model}: ${e.message}`); }
       }
     }
   }
-  throw last || new Error('No Gemini model is currently available.');
+  throw new Error('No model could answer. ' + problems.slice(-3).join(' | '));
 }
 
 async function testGemini(key) {
@@ -271,6 +346,7 @@ async function createSheet() {
   }
   if (!checked) throw lastError || new Error('The converted spreadsheet is not ready yet.');
   saveCred(STORE.sheet, checked.id);
+  transactionsGid = null;
   await ensureHiddenTabs();
   currentLists = null;
   return { ok: true, id: checked.id, url: checked.url, message: 'Sheet created in your Google Drive.' };
@@ -341,7 +417,10 @@ async function appendTransaction(entry) {
   const clean = value => /^[=+@-]/.test(String(value ?? '')) ? `'${String(value)}` : String(value ?? '');
   const row = [date, entry.type, clean(String(entry.description || '').slice(0, 60)), Number(entry.amount), clean(entry.category || ''), clean(entry.account || ''), clean(entry.to_account || ''), clean(entry.originalText || ''), entry.needsReview ? 'Yes' : '', new Date().toISOString()];
   const result = await valuesAppend('Transactions!A:J', [row]);
-  return Number((result.updates?.updatedRange || '').match(/![A-Z]+(\d+)/)?.[1]) || null;
+  const rows = rangeRows(result.updates?.updatedRange);
+  const rowIndex = rows ? rows.start : null;
+  if (rowIndex) await formatTransactionRows(rowIndex, rowIndex, !!entry.needsReview);
+  return rowIndex;
 }
 
 function makeReportCard(title, subtitle, totalLabel, total, rows = [], emptyText = '') {
@@ -438,6 +517,7 @@ async function updateRow(rowIndex, changes) {
   if (!row) return { ok: false, message: 'Transaction not found.' };
   for (const [key, value] of Object.entries(changes || {})) if (key in allowed) row[allowed[key]] = (typeof value === 'string' && /^[=+@-]/.test(value)) ? `'${value}` : value;
   await valuesUpdate(`Transactions!A${rowIndex}:J${rowIndex}`, [row]);
+  await formatTransactionRows(rowIndex, rowIndex, String(row[8] || '') === 'Yes');
   return { ok: true };
 }
 async function deleteRow(rowIndex) {
@@ -577,9 +657,15 @@ async function chatReply(text, history, files = []) {
       if (extracted) attachments.push({ text: `Attachment ${f.name || ''}:\n${extracted.slice(0, 60000)}` });
     }
   }
-  const prompt = `You are the General Chatbot in Expense Chat. Answer clearly and accurately. Use Google Search grounding when useful. User message: ${text}`;
-  const answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: true });
-  return { ok: true, kind: 'chat', reply: answer || 'I could not generate a response.' };
+  const prompt = `You are the General Chatbot in Expense Chat. Answer clearly and accurately. For anything current, recent or factual that could have changed, use Google Search. User message: ${text}`;
+  const meta = {};
+  let answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: true, meta });
+  if (meta.grounded && meta.sources?.length) {
+    answer += '\n\nSources:\n' + meta.sources.map(s => `- ${s.title}: ${s.uri}`).join('\n');
+  } else if (!meta.grounded) {
+    answer = '(Web search was unavailable for this reply, so this is from the model\'s own knowledge.)\n\n' + answer;
+  }
+  return { ok: true, kind: 'chat', reply: answer };
 }
 
 async function saveExtracted(rows) {
@@ -589,7 +675,11 @@ async function saveExtracted(rows) {
     const category = lists.categories.find(c => norm(c) === norm(r.category));
     values.push([r.date || isoToday(), r.type || 'Expense', String(r.description || '').slice(0, 60), Number(r.amount) || 0, category || r.category || '', account?.name || r.account || '', '', 'Imported from attachment', 'Yes', new Date().toISOString()]);
   }
-  if (values.length) await valuesAppend('Transactions!A:J', values);
+  if (values.length) {
+    const result = await valuesAppend('Transactions!A:J', values);
+    const span = rangeRows(result.updates?.updatedRange);
+    if (span) await formatTransactionRows(span.start, span.end, true);
+  }
   return { ok: true, reply: `Saved ${values.length} extracted transaction(s).` };
 }
 
@@ -619,10 +709,10 @@ async function call(action, args = []) {
   if (action === 'api_linkSheet') {
     const picked = await chooseSheet();
     if (!picked) return { ok: false, message: 'No spreadsheet selected.' };
-    saveCred(STORE.sheet, picked.id); currentLists = null; await ensureHiddenTabs();
+    saveCred(STORE.sheet, picked.id); currentLists = null; transactionsGid = null; await ensureHiddenTabs();
     return { ok: true, id: picked.id, url: picked.url, message: 'Sheet linked.' };
   }
-  if (action === 'api_resetSetup') { if (args[0] === 'all' || args[0] === 'sheet') saveCred(STORE.sheet, ''); if (args[0] === 'all' || args[0] === 'key') saveCred(STORE.key, ''); currentLists = null; return { keySaved: !!readCreds().apiKey, sheetSaved: !!readCreds().sheetId, ready: false }; }
+  if (action === 'api_resetSetup') { if (args[0] === 'all' || args[0] === 'sheet') saveCred(STORE.sheet, ''); if (args[0] === 'all' || args[0] === 'key') saveCred(STORE.key, ''); currentLists = null; transactionsGid = null; return { keySaved: !!readCreds().apiKey, sheetSaved: !!readCreds().sheetId, ready: false }; }
   if (!c.sheetId && !['api_historyList'].includes(action)) throw new Error('Connect Google and link a Sheet first.');
   switch (action) {
     case 'api_getBudget': { const b = await budgetStatus(args[0], args[1]); return { ok: true, budget: b, reply: `${b.monthLabel}: ${fmtRs(b.totalSpent)} spent against ${fmtRs(b.totalBudget)} budget.`, card: { cardType: 'budget', title: 'Monthly budget', subtitle: b.monthLabel, totalLabel: 'Total budgeted', totalAmount: fmtRs(b.totalBudget), spentAmount: fmtRs(b.totalSpent), rows: b.rows.map(r => ({ label: r.category, value: `${fmtRs(r.spent)} / ${fmtRs(r.budget)}`, meta: `${r.percent}% used · ${fmtRs(r.remaining)} remaining`, progress: r.percent, status: r.status })), emptyText: 'No budgets configured.' } }; }
