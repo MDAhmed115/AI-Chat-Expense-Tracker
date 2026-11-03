@@ -253,43 +253,43 @@ async function gemini(prompt, { json = false, files = [], history = [], search =
   if (!key) throw new Error('Add your Gemini API key in Settings.');
   const models = ['gemini-3.5-flash-lite', 'gemma-4-26B-A4B'];
   const problems = [];
-  const searchModes = search ? [true, false] : [false];
+  const searchProblems = [];
+  const toolVariants = search ? ['google_search', 'googleSearch', null] : [null];
   const jsonModes = json ? [true, false] : [false];
   for (const model of models) {
-    for (const useSearch of searchModes) {
-      if (useSearch && /^gemma/i.test(model)) continue;
+    for (const tool of toolVariants) {
+      if (tool && /^gemma/i.test(model)) continue; // Gemma has no Google Search tool
       for (const useJson of jsonModes) {
         const contents = [];
         for (const item of history) contents.push({ role: item.role === 'user' ? 'user' : 'model', parts: [{ text: String(item.text || '') }] });
         contents.push({ role: 'user', parts: [{ text: prompt }, ...files] });
         const body = { contents, generationConfig: { temperature: 0.2, ...(useJson ? { responseMimeType: 'application/json' } : {}) } };
-        if (useSearch) body.tools = [{ google_search: {} }];
+        if (tool) body.tools = [{ [tool]: {} }];
+        const label = `${model}${tool ? ' + search (' + tool + ')' : ''}`;
+        const fail = msg => { const m = `${label}: ${msg}`; problems.push(m); if (tool) searchProblems.push(m); };
         try {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
           });
           const data = await response.json();
-          if (!response.ok) { problems.push(`${model}${useSearch ? ' + search' : ''}: ${data.error?.message || 'error ' + response.status}`); continue; }
+          if (!response.ok) { fail(data.error?.message || 'error ' + response.status); continue; }
           const cand = data.candidates?.[0];
           const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('\n').trim();
-          if (!text) {
-            problems.push(`${model}${useSearch ? ' + search' : ''}: empty answer (${data.promptFeedback?.blockReason || cand?.finishReason || 'no reason given'})`);
-            continue;
-          }
+          if (!text) { fail(`empty answer (${data.promptFeedback?.blockReason || cand?.finishReason || 'no reason given'})`); continue; }
           if (meta) {
-            meta.grounded = useSearch;
+            meta.grounded = !!tool;
+            meta.searchProblems = searchProblems;
             meta.sources = (cand?.groundingMetadata?.groundingChunks || [])
               .map(c => c.web).filter(w => w && w.uri).slice(0, 5)
               .map(w => ({ title: w.title || 'Source', uri: w.uri }));
           }
           return text;
-        } catch (e) { problems.push(`${model}: ${e.message}`); }
+        } catch (e) { fail(e.message); }
       }
     }
   }
   throw new Error('No model could answer. ' + problems.slice(-3).join(' | '));
 }
-
 async function testGemini(key) {
   if (!/^AIza[\w-]{20,}$/.test(key)) return { ok: false, message: 'Invalid Gemini API key format.' };
   const previous = localStorage.getItem(STORE.key);
@@ -662,8 +662,9 @@ async function chatReply(text, history, files = []) {
   let answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: true, meta });
   if (meta.grounded && meta.sources?.length) {
     answer += '\n\nSources:\n' + meta.sources.map(s => `- ${s.title}: ${s.uri}`).join('\n');
-  } else if (!meta.grounded) {
-    answer = '(Web search was unavailable for this reply, so this is from the model\'s own knowledge.)\n\n' + answer;
+    } else if (!meta.grounded) {
+    const why = (meta.searchProblems && meta.searchProblems[0]) || 'no reason returned';
+    answer = `(Web search failed: ${String(why).slice(0, 300)})\n\n` + answer;
   }
   return { ok: true, kind: 'chat', reply: answer };
 }
