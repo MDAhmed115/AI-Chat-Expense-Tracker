@@ -14,10 +14,6 @@ let tokenClient = null;
 let pickerReady = false;
 let currentLists = null;
 let pendingClearUntil = 0;
-let transactionsGid = null;
-
-// Row colour used for entries that need review (change here if you want another orange).
-const REVIEW_COLOR = { red: 0.976, green: 0.796, blue: 0.612 };
 
 const readCreds = () => ({
   apiKey: localStorage.getItem(STORE.key) || '',
@@ -140,54 +136,6 @@ async function validateSheet(id) {
   const missing = required.filter(x => !names.includes(x));
   if (missing.length) throw new Error(`This is not an Expense Chat template. Missing tabs: ${missing.join(', ')}.`);
   return { id, url: meta.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${id}/edit`, names };
-}
-
-/* ---------- Row formatting (fixes the date showing as a number and the inherited blue fill) ---------- */
-async function getTransactionsGid() {
-  if (transactionsGid !== null) return transactionsGid;
-  const meta = await metadata();
-  const sheet = (meta.sheets || []).find(s => s.properties.title === 'Transactions');
-  if (!sheet) throw new Error('Transactions tab not found.');
-  transactionsGid = sheet.properties.sheetId;
-  return transactionsGid;
-}
-
-function rangeRows(updatedRange) {
-  const m = String(updatedRange || '').match(/!([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?/);
-  if (!m) return null;
-  const start = Number(m[2]);
-  const end = m[4] ? Number(m[4]) : start;
-  return { start, end };
-}
-
-/* Normal rows: no fill. Review rows: orange. Date column: always a real date format. */
-async function formatTransactionRows(startRow, endRow, review) {
-  if (!startRow || !endRow) return;
-  try {
-    const sheetId = await getTransactionsGid();
-    const area = (c0, c1) => ({ sheetId, startRowIndex: startRow - 1, endRowIndex: endRow, startColumnIndex: c0, endColumnIndex: c1 });
-    const requests = [
-      {
-        repeatCell: {
-          range: area(0, 10),
-          cell: { userEnteredFormat: review ? { backgroundColor: REVIEW_COLOR } : {} },
-          fields: 'userEnteredFormat.backgroundColor'
-        }
-      },
-      {
-        repeatCell: {
-          range: area(0, 1),
-          cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } },
-          fields: 'userEnteredFormat.numberFormat'
-        }
-      }
-    ];
-    await googleFetch(`${apiBase(readCreds().sheetId)}:batchUpdate`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests })
-    });
-  } catch (e) {
-    console.warn('Could not format the new row:', e);
-  }
 }
 
 async function ensureHiddenTabs() {
@@ -323,7 +271,6 @@ async function createSheet() {
   }
   if (!checked) throw lastError || new Error('The converted spreadsheet is not ready yet.');
   saveCred(STORE.sheet, checked.id);
-  transactionsGid = null;
   await ensureHiddenTabs();
   currentLists = null;
   return { ok: true, id: checked.id, url: checked.url, message: 'Sheet created in your Google Drive.' };
@@ -394,10 +341,7 @@ async function appendTransaction(entry) {
   const clean = value => /^[=+@-]/.test(String(value ?? '')) ? `'${String(value)}` : String(value ?? '');
   const row = [date, entry.type, clean(String(entry.description || '').slice(0, 60)), Number(entry.amount), clean(entry.category || ''), clean(entry.account || ''), clean(entry.to_account || ''), clean(entry.originalText || ''), entry.needsReview ? 'Yes' : '', new Date().toISOString()];
   const result = await valuesAppend('Transactions!A:J', [row]);
-  const rows = rangeRows(result.updates?.updatedRange);
-  const rowIndex = rows ? rows.start : null;
-  if (rowIndex) await formatTransactionRows(rowIndex, rowIndex, !!entry.needsReview);
-  return rowIndex;
+  return Number((result.updates?.updatedRange || '').match(/![A-Z]+(\d+)/)?.[1]) || null;
 }
 
 function makeReportCard(title, subtitle, totalLabel, total, rows = [], emptyText = '') {
@@ -494,7 +438,6 @@ async function updateRow(rowIndex, changes) {
   if (!row) return { ok: false, message: 'Transaction not found.' };
   for (const [key, value] of Object.entries(changes || {})) if (key in allowed) row[allowed[key]] = (typeof value === 'string' && /^[=+@-]/.test(value)) ? `'${value}` : value;
   await valuesUpdate(`Transactions!A${rowIndex}:J${rowIndex}`, [row]);
-  await formatTransactionRows(rowIndex, rowIndex, String(row[8] || '') === 'Yes');
   return { ok: true };
 }
 async function deleteRow(rowIndex) {
@@ -646,11 +589,7 @@ async function saveExtracted(rows) {
     const category = lists.categories.find(c => norm(c) === norm(r.category));
     values.push([r.date || isoToday(), r.type || 'Expense', String(r.description || '').slice(0, 60), Number(r.amount) || 0, category || r.category || '', account?.name || r.account || '', '', 'Imported from attachment', 'Yes', new Date().toISOString()]);
   }
-  if (values.length) {
-    const result = await valuesAppend('Transactions!A:J', values);
-    const span = rangeRows(result.updates?.updatedRange);
-    if (span) await formatTransactionRows(span.start, span.end, true);
-  }
+  if (values.length) await valuesAppend('Transactions!A:J', values);
   return { ok: true, reply: `Saved ${values.length} extracted transaction(s).` };
 }
 
@@ -680,10 +619,10 @@ async function call(action, args = []) {
   if (action === 'api_linkSheet') {
     const picked = await chooseSheet();
     if (!picked) return { ok: false, message: 'No spreadsheet selected.' };
-    saveCred(STORE.sheet, picked.id); currentLists = null; transactionsGid = null; await ensureHiddenTabs();
+    saveCred(STORE.sheet, picked.id); currentLists = null; await ensureHiddenTabs();
     return { ok: true, id: picked.id, url: picked.url, message: 'Sheet linked.' };
   }
-  if (action === 'api_resetSetup') { if (args[0] === 'all' || args[0] === 'sheet') saveCred(STORE.sheet, ''); if (args[0] === 'all' || args[0] === 'key') saveCred(STORE.key, ''); currentLists = null; transactionsGid = null; return { keySaved: !!readCreds().apiKey, sheetSaved: !!readCreds().sheetId, ready: false }; }
+  if (action === 'api_resetSetup') { if (args[0] === 'all' || args[0] === 'sheet') saveCred(STORE.sheet, ''); if (args[0] === 'all' || args[0] === 'key') saveCred(STORE.key, ''); currentLists = null; return { keySaved: !!readCreds().apiKey, sheetSaved: !!readCreds().sheetId, ready: false }; }
   if (!c.sheetId && !['api_historyList'].includes(action)) throw new Error('Connect Google and link a Sheet first.');
   switch (action) {
     case 'api_getBudget': { const b = await budgetStatus(args[0], args[1]); return { ok: true, budget: b, reply: `${b.monthLabel}: ${fmtRs(b.totalSpent)} spent against ${fmtRs(b.totalBudget)} budget.`, card: { cardType: 'budget', title: 'Monthly budget', subtitle: b.monthLabel, totalLabel: 'Total budgeted', totalAmount: fmtRs(b.totalBudget), spentAmount: fmtRs(b.totalSpent), rows: b.rows.map(r => ({ label: r.category, value: `${fmtRs(r.spent)} / ${fmtRs(r.budget)}`, meta: `${r.percent}% used · ${fmtRs(r.remaining)} remaining`, progress: r.percent, status: r.status })), emptyText: 'No budgets configured.' } }; }
