@@ -93,10 +93,7 @@
 
   function makeId() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 
-  /* ---------- Credentials (live ONLY in this browser) ----------
-     localStorage keeps them across refreshes and restarts. A different browser, a different
-     device, or a private/incognito window starts empty, so setup is asked for again.
-     If the browser blocks storage, they are kept in memory for this tab only. */
+  /* ---------- Credentials (live ONLY in this browser) ---------- */
   var LS_KEY = 'ec_api_key';
   var LS_SHEET = 'ec_sheet_id';
   var memCreds = { apiKey: '', sheetId: '' };
@@ -140,7 +137,7 @@
     };
   }
 
-  /* ---------- HTTP API calls (every request carries this visitor's own key and Sheet ID) ---------- */
+  /* ---------- HTTP API calls ---------- */
   function callServer(fn, args) {
     if (!window.ExpenseAPI || typeof window.ExpenseAPI.call !== 'function') {
       return Promise.reject(new Error('Expense Chat services have not initialized.'));
@@ -182,25 +179,106 @@
     return n;
   }
 
-  /* Plain text with clickable http(s) links (built with DOM nodes, never innerHTML). */
-  function linkInto(node, text) {
-    var re = /https?:\/\/[^\s<>"']+/g;
+  /* ---------- Markdown rendering (DOM nodes only, never innerHTML) ---------- */
+  var INLINE_RE = /(`[^`\n]+`)|(\*\*[^*\n]+?\*\*)|(__[^_\n]+?__)|(\*[^*\s][^*\n]*?\*)|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"']+)/g;
+
+  function mdInline(node, text) {
+    var re = new RegExp(INLINE_RE.source, 'g');
     var last = 0, m;
     while ((m = re.exec(text))) {
-      var url = m[0], tail = '';
-      var t = url.match(/[.,;:!?)\]]+$/);
-      if (t) { tail = t[0]; url = url.slice(0, url.length - tail.length); }
-      node.appendChild(document.createTextNode(text.slice(last, m.index)));
-      var a = h('a', null, url);
-      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      node.appendChild(a);
-      if (tail) node.appendChild(document.createTextNode(tail));
+      if (m.index > last) node.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[1]) {
+        node.appendChild(h('code', 'md-code', m[1].slice(1, -1)));
+      } else if (m[2] || m[3]) {
+        var b = h('strong'); mdInline(b, m[0].slice(2, -2)); node.appendChild(b);
+      } else if (m[4]) {
+        var it = h('em'); mdInline(it, m[0].slice(1, -1)); node.appendChild(it);
+      } else if (m[5]) {
+        var a = h('a', null, m[5]); a.href = m[6]; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        node.appendChild(a);
+      } else if (m[7]) {
+        var url = m[7], tail = '';
+        var t = url.match(/[.,;:!?)\]]+$/);
+        if (t) { tail = t[0]; url = url.slice(0, url.length - tail.length); }
+        var link = h('a', null, url); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        node.appendChild(link);
+        if (tail) node.appendChild(document.createTextNode(tail));
+      }
       last = m.index + m[0].length;
     }
-    node.appendChild(document.createTextNode(text.slice(last)));
+    if (last < text.length) node.appendChild(document.createTextNode(text.slice(last)));
   }
 
-  /* Chatbot answers: plain text with ``` code fences drawn as code blocks. */
+  function mdCells(line) {
+    return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); });
+  }
+
+  var MD_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+  var MD_LIST = /^\s*([-*+]|\d+[.)])\s+/;
+
+  function mdBlockStart(line, next) {
+    return /^#{1,6}\s+/.test(line) || MD_LIST.test(line) || /^>\s?/.test(line) ||
+      /^\s*([-*_])\1{2,}\s*$/.test(line) ||
+      (line.indexOf('|') >= 0 && next !== undefined && MD_TABLE_SEP.test(next));
+  }
+
+  function renderMarkdown(container, text) {
+    var lines = String(text).replace(/\r/g, '').split('\n');
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (!line.trim()) { i++; continue; }
+
+      var hm = line.match(/^(#{1,6})\s+(.*)$/);
+      if (hm) {
+        var hd = h('div', 'md-h md-h' + Math.min(hm[1].length, 4));
+        mdInline(hd, hm[2].replace(/\s*#+\s*$/, ''));
+        container.appendChild(hd); i++; continue;
+      }
+
+      if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { container.appendChild(h('hr', 'md-hr')); i++; continue; }
+
+      if (line.indexOf('|') >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1])) {
+        var head = mdCells(line); i += 2;
+        var wrap = h('div', 'md-table-wrap'), table = h('table', 'md-table');
+        var thead = h('thead'), htr = h('tr');
+        head.forEach(function (c) { var th = h('th'); mdInline(th, c); htr.appendChild(th); });
+        thead.appendChild(htr); table.appendChild(thead);
+        var tbody = h('tbody');
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf('|') >= 0) {
+          var tr = h('tr');
+          mdCells(lines[i]).forEach(function (c) { var td = h('td'); mdInline(td, c); tr.appendChild(td); });
+          tbody.appendChild(tr); i++;
+        }
+        table.appendChild(tbody); wrap.appendChild(table); container.appendChild(wrap); continue;
+      }
+
+      if (MD_LIST.test(line)) {
+        var ordered = /^\s*\d/.test(line);
+        var list = h(ordered ? 'ol' : 'ul', 'md-list');
+        while (i < lines.length && MD_LIST.test(lines[i])) {
+          var li = h('li'); mdInline(li, lines[i].replace(MD_LIST, ''));
+          list.appendChild(li); i++;
+        }
+        container.appendChild(list); continue;
+      }
+
+      if (/^>\s?/.test(line)) {
+        var bq = h('blockquote', 'md-quote'), qs = [];
+        while (i < lines.length && /^>\s?/.test(lines[i])) { qs.push(lines[i].replace(/^>\s?/, '')); i++; }
+        mdInline(bq, qs.join(' ')); container.appendChild(bq); continue;
+      }
+
+      var p = h('p', 'md-p'), first = true;
+      while (i < lines.length && lines[i].trim() && (first || !mdBlockStart(lines[i], lines[i + 1]))) {
+        if (!first) p.appendChild(document.createElement('br'));
+        mdInline(p, lines[i].trim()); first = false; i++;
+      }
+      container.appendChild(p);
+    }
+  }
+
+  /* Chatbot answers: markdown rendered as formatted text, ``` fences drawn as code blocks. */
   function richInto(node, text) {
     var parts = String(text).split('```');
     parts.forEach(function (p, i) {
@@ -211,7 +289,7 @@
         node.appendChild(pre);
       } else {
         var t = p.replace(/^\n+|\n+$/g, '');
-        if (t) { var d = h('div', 'chat-text'); linkInto(d, t); node.appendChild(d); }
+        if (t) { var d = h('div', 'chat-text md'); renderMarkdown(d, t); node.appendChild(d); }
       }
     });
     if (!node.firstChild) node.appendChild(h('div', 'chat-text', String(text)));
@@ -395,7 +473,7 @@
   }
 
   function promptSetBudget(category) {
-    var cat = category || window.prompt('Category name (must match your Categories tab):');
+    var cat = (typeof category === 'string' && category) ? category : window.prompt('Category name (must match your Categories tab):');
     if (cat === null || !String(cat).trim()) return;
     var amount = window.prompt('Monthly budget for ' + cat + ' in PKR:');
     if (amount === null) return;
@@ -648,8 +726,7 @@
     try { localStorage.setItem('ec_mode', mode); } catch (e) {}
   }
 
-  /* Opens a clean window for a brand-new thread in mode m. The previous thread
-     is already saved (it is saved after every reply) and shows under Recent. */
+  /* Opens a clean window for a brand-new thread in mode m. */
   function newThread(m) {
     mode = m;
     sid = makeId();
@@ -897,7 +974,7 @@
       x.addEventListener('click', function () { pendingFiles.splice(i, 1); renderChips(); });
       chip.appendChild(x); el.attachChips.appendChild(chip);
     });
-    if (cached.length) el.attachChips.appendChild(h('span', 'context-label', 'Saved in this chat · click Reuse to attach again'));
+    if (cached.length) el.attachChips.appendChild(h('span', 'context-label', 'Saved in this chat \u00B7 click Reuse to attach again'));
     cached.forEach(function (f) {
       var chip = h('span', 'chip'); chip.appendChild(h('span', 'chip-name', f.name));
       var already = pendingFiles.some(function (x) { return x.id === f.id; });
