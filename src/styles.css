@@ -313,6 +313,7 @@
   .msg-bubble.error { color: var(--err-color); box-shadow: var(--glass-specular), var(--glass-shadow), 0 0 0 1.5px var(--err-color); }
   .msg-bubble.chat { white-space: normal; max-width: 88%; }
   .chat-text { white-space: pre-wrap; }
+  .chat-text.md { white-space: normal; }
   .code-block {
     margin: 10px 0 0; padding: 12px 14px; border-radius: 12px; background: rgba(43, 42, 30, 0.08);
     overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -321,6 +322,25 @@
   .chat-text + .code-block, .code-block + .chat-text { margin-top: 10px; display: block; }
   body.dark .code-block { background: rgba(0, 0, 0, 0.35); }
   @keyframes bubbleIn { from { opacity: 0; transform: translate3d(0, 6px, 0); } }
+
+  /* ---------- Rendered markdown (General Chatbot answers) ---------- */
+  .md > :first-child { margin-top: 0; }
+  .md > :last-child { margin-bottom: 0; }
+  .md-p { margin: 0 0 .7em; line-height: 1.55; }
+  .md-h { font-weight: 700; margin: .9em 0 .4em; line-height: 1.3; }
+  .md-h1 { font-size: 1.3em; }
+  .md-h2 { font-size: 1.15em; }
+  .md-h3, .md-h4 { font-size: 1.02em; }
+  .md-list { margin: 0 0 .7em; padding-left: 1.4em; }
+  .md-list li { margin: .2em 0; line-height: 1.5; }
+  .md-code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; padding: .1em .4em; border-radius: 5px; background: rgba(127,127,127,.22); }
+  .md-quote { margin: 0 0 .7em; padding: .2em .9em; border-left: 3px solid rgba(127,127,127,.5); opacity: .9; }
+  .md-hr { border: 0; border-top: 1px solid rgba(127,127,127,.35); margin: .9em 0; }
+  .md-table-wrap { overflow-x: auto; margin: 0 0 .8em; }
+  .md-table { border-collapse: collapse; font-size: .95em; }
+  .md-table th, .md-table td { border: 1px solid rgba(127,127,127,.4); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .md-table th { background: rgba(127,127,127,.18); font-weight: 700; }
+  .md a { text-decoration: underline; word-break: break-word; }
 
   /* Cards */
   .confirm-card {
