@@ -692,6 +692,7 @@ async function chatReply(text, history, files = []) {
     answer = '(Live search is unavailable right now, so this may be out of date.)\n\n' + answer;
   }
   return { ok: true, kind: 'chat', reply: answer };
+}
 async function saveExtracted(rows) {
   const lists = await loadLists(); const values = [];
   for (const r of (rows || []).slice(0, 30)) {
