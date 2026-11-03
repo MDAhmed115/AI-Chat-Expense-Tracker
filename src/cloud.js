@@ -682,16 +682,16 @@ async function chatReply(text, history, files = []) {
     }
   }
   const prompt = `You are the General Chatbot in Expense Chat. Answer clearly and accurately. Do not mention tools, searching or your own limitations unless the user asks. User message: ${text}`;
+  const NEEDS_LIVE = /\b(today|tonight|now|current|currently|latest|recent|news|weather|price|prices|score|scores|results?|who won|winner|trending|popular|stock|rate|exchange|released?|this (week|month|year)|20(2[5-9]|3\d))\b/i;
+  const wantsSearch = NEEDS_LIVE.test(text);
   const meta = {};
-  let answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: true, meta });
-  const NEEDS_LIVE = /\b(today|tonight|now|current|currently|latest|recent|news|weather|price|score|results?|who won|trending|popular|this (week|month|year)|20(2[5-9]|3\d))\b/i;
+  let answer = await gemini(prompt, { files: attachments, history: (history || []).slice(-10), search: wantsSearch, meta });
   if (meta.grounded && meta.sources?.length) {
     answer += '\n\nSources:\n' + meta.sources.map(s => `- ${s.title}: ${s.uri}`).join('\n');
-  } else if (!meta.grounded && NEEDS_LIVE.test(text)) {
+  } else if (wantsSearch && !meta.grounded) {
     answer = '(Live search is unavailable right now, so this may be out of date.)\n\n' + answer;
   }
   return { ok: true, kind: 'chat', reply: answer };
-
 async function saveExtracted(rows) {
   const lists = await loadLists(); const values = [];
   for (const r of (rows || []).slice(0, 30)) {
