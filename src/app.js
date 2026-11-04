@@ -638,6 +638,66 @@
     return place(card, item);
   }
 
+  /* ---------- Clarify card: ask for a missing account / category before saving ---------- */
+  function addClarify(c, item) {
+    leaveFresh();
+    var card = h('div', 'confirm-card preview-card');
+    var head = h('div', 'card-header');
+    var tick = h('span', 'status-tick'); tick.innerHTML = ICON_ALERT;
+    head.appendChild(tick); head.appendChild(h('span', null, 'One more detail'));
+    card.appendChild(head);
+    card.appendChild(h('div', 'card-val', c.amountText));
+    card.appendChild(h('div', 'report-sub', c.summary));
+
+    var choices = {};
+    var msg = h('div', 'pv-msg');
+
+    function setBusy(on) { card.querySelectorAll('button').forEach(function (b) { b.disabled = on; }); }
+    function save(review) {
+      setBusy(true); msg.style.color = 'var(--text-muted)'; msg.textContent = 'Saving...';
+      callServer('api_saveClarified', [c.entry, choices, review]).then(function (res) {
+        if (res && res.ok) {
+          card.querySelectorAll('.clarify-group, .clarify-actions').forEach(function (n) { n.remove(); });
+          msg.textContent = review ? 'Kept for review.' : 'Saved.';
+          if (isLive(item)) showResult(res, { anchor: card });
+          callServer('api_historySave', [item.sid, item.mode, c.summary, res.reply]).then(function (r) { if (r && r.ok) loadHistoryList(); }).catch(function () {});
+        } else {
+          setBusy(false); msg.style.color = 'var(--err-color)';
+          msg.textContent = (res && res.reply) || 'Could not save. Please try again.';
+        }
+      }).catch(function () { setBusy(false); msg.style.color = 'var(--err-color)'; msg.textContent = SERVER_ERR; });
+    }
+
+    c.missing.forEach(function (m) {
+      var g = h('div', 'clarify-group');
+      g.appendChild(h('div', 'report-sub', m.label));
+      var row = h('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px';
+      var btns = [];
+      m.options.forEach(function (opt) {
+        var b = h('button', 'glass-btn', opt); b.type = 'button';
+        b.addEventListener('click', function () {
+          choices[m.field] = opt;
+          btns.forEach(function (x) { x.classList.toggle('primary', x === b); });
+          if (c.missing.every(function (mm) { return choices[mm.field]; })) save(false);
+        });
+        btns.push(b); row.appendChild(b);
+      });
+      g.appendChild(row); card.appendChild(g);
+    });
+
+    var actions = h('div', 'pv-actions clarify-actions');
+    var keep = h('button', 'glass-btn', 'Keep for review'); keep.type = 'button';
+    var discard = h('button', 'glass-btn', 'Discard'); discard.type = 'button';
+    keep.addEventListener('click', function () { save(true); });
+    discard.addEventListener('click', function () {
+      card.querySelectorAll('.clarify-group, .clarify-actions').forEach(function (n) { n.remove(); });
+      msg.textContent = 'Discarded. Nothing was saved.';
+    });
+    actions.appendChild(msg); actions.appendChild(discard); actions.appendChild(keep);
+    card.appendChild(actions);
+    return place(card, item);
+  }
+
   function showTyping(item) {
     hideTyping();
     var t = h('div', 'msg-bubble bot typing-indicator');
@@ -1106,6 +1166,7 @@
       else if (c && c.cardType === 'report') addReport(c, item);
       else if (c) addCard(c, item);
     });
+    (res.clarifies || []).forEach(function (c) { addClarify(c, item); });
   }
 
   /* After a reply: remember it for chat context and save it to the Sheet in the background. */
