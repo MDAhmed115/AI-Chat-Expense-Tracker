@@ -1,126 +1,148 @@
- <div align="center">
-  <img src="./expense_chat_logo.jpg" alt="Expense Chat Logo" width="220">
+<div align="center">
+
+  <img src="./expense_chat_logo.jpg" alt="Expense Chat Logo" width="200">
 
   # Expense Chat
 
-  **Your finances, in a conversation.**
+  ### Just say what you spent. It handles the rest.
 
-  A personal finance manager and AI chatbot that turns everyday messages into organised financial records — powered by Google Gemini and your own Google Sheets.
+  A conversational finance manager and AI chatbot. Type a normal sentence, and Google Gemini turns it into a clean record in **your own Google Sheet**. No forms, no spreadsheets to fiddle with, no backend that holds your data.
 
-  [**Open the Live App**](https://ai-chat-expense-tracker.vercel.app/) · [Report a Bug](https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/issues) · [Request a Feature](https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/issues)
+  <br>
+
+  [**Open the Live App**](https://ai-chat-expense-tracker.vercel.app/) &nbsp;·&nbsp; [Report a Bug](https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/issues) &nbsp;·&nbsp; [Request a Feature](https://github.com/MDAhmed115/AI-Chat-Expense-Tracker/issues)
+
+  <br>
 
   ![Vite](https://img.shields.io/badge/Frontend-Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
   ![Gemini](https://img.shields.io/badge/AI-Google%20Gemini-4285F4?style=flat-square&logo=googlegemini&logoColor=white)
   ![Google Sheets](https://img.shields.io/badge/Data-Google%20Sheets-34A853?style=flat-square&logo=googlesheets&logoColor=white)
   ![Vercel](https://img.shields.io/badge/Hosting-Vercel-000000?style=flat-square&logo=vercel&logoColor=white)
+  ![No Backend](https://img.shields.io/badge/Backend-None-4F5B2A?style=flat-square)
+
 </div>
 
 ---
 
-## Overview
+## Why Expense Chat?
 
-**Expense Chat** makes personal expense tracking as simple as sending a message.
+Most expense trackers make you open an app, pick a category, choose an account, type an amount, and press save. By the time you finish, you have stopped bothering.
 
-Instead of navigating forms and manually entering every transaction, describe what happened in plain language. Google Gemini interprets your message and converts it into structured financial records stored directly in a Google Sheet that you own.
+Expense Chat works the way you already think:
 
-Expense Chat also includes a separate general-purpose AI chatbot for everyday questions, supported file attachments, and Google Search grounding.
+```text
+You:   deduct 200 rs from nayapay for fries
+App:   Expense added: Rs 200 from NayaPay · Food & Restaurants.
+```
 
-**Your spreadsheet. Your Google account. Your Gemini API key. Your data.**
+Everything lands in a Google Sheet that **you own**, using **your own Gemini API key**. There is no Expense Chat server, no account to create, and no one else reading your numbers.
 
-## Features
+## What You Can Do
 
 ### Finance Manager
-- **Natural-language tracking:** Record expenses, income, and transfers through ordinary messages.
-- **Financial queries:** Ask about account balances, spending totals, and category breakdowns.
-- **Monthly budgets:** Set and monitor category budgets.
-- **Transaction management:** Review, edit, delete, and undo recent transactions.
-- **Receipt and statement imports:** Extract transaction details from supported images and PDFs, then review before saving.
-- **Chat history:** Revisit, pin, rename, and delete saved conversations.
 
-### General Chatbot
-- Ask general questions and get AI-powered responses.
-- Attach supported images, PDFs, and common document formats.
-- Use Google Search grounding for information retrieval when supported.
-- Maintain separate conversation history.
-
-### User Experience
-- Responsive desktop and mobile interface.
-- Light and dark themes.
-- Voice dictation where supported by the browser.
-- Google Sheets integration.
-- Asia/Karachi timezone support.
-
-## See It in Action
-
-Try messages like these in Finance Manager:
-
-| Message | Result |
+| You type | What happens |
 |---|---|
 | `Spent 850 on groceries from cash` | Records an expense |
 | `Received 12000 salary in bank` | Records income |
-| `Transfer 2000 from cash to savings` | Records a transfer |
-| `How much did I spend this month?` | Calculates spending |
-| `What is my bank balance?` | Checks account balance |
-| `Show spending by category` | Generates a category breakdown |
+| `Transfer 2000 from cash to savings` | Records a transfer between accounts |
+| `200 fries` | Asks which account (see below) before saving |
+| `How much did I spend this month?` | Calculates your total |
+| `What is my bank balance?` | Shows account balances |
+| `Show spending by category` | Breaks down spending by category |
+| `undo` | Removes your most recent transaction |
 
-The app uses the accounts and categories configured in your spreadsheet to validate financial entries. Always review extracted transaction details before relying on them.
+Plus:
 
-## Technology Stack
+- **Asks before guessing.** If you leave out the account (or category), nothing is saved yet. You get a card with one button per account, read live from your Accounts tab, so one tap finishes the entry. Prefer to sort it out later? Tap **Keep for review** and it is saved in orange for you to fix.
+- **Multiple items in one message.** Several expenses in one sentence become several rows.
+- **Monthly budgets.** Set a budget per category and watch progress bars turn amber, then red, as you get close.
+- **Edit and delete.** Every saved entry has Edit and Delete buttons right on its card.
+- **Receipt and statement import.** Attach a photo or PDF. Gemini extracts the transactions, flags possible duplicates, and shows them for review. Nothing is saved until you press **Save selected**.
+- **Monthly report export.** Download a printable report for any month.
+- **Safe clearing.** Wiping your transactions needs a second `CONFIRM CLEAR` within 60 seconds.
 
-| Component | Technology |
-|---|---|
-| Frontend | HTML, CSS, JavaScript |
-| Build Tool | Vite |
-| AI Engine | Google Gemini API |
-| Financial Database | Google Sheets API v4 |
-| Authentication | Google Identity Services |
-| Spreadsheet Selection | Google Picker |
-| Spreadsheet Creation | Google Drive API v3 |
-| File Processing | JSZip |
-| Deployment | Vercel |
+### General Chatbot
 
-Expense Chat uses a static, browser-based architecture. Its core operations communicate directly with Google's APIs rather than relying on an Apps Script proxy or custom serverless backend.
+A separate private assistant in the same app:
+
+- Ask anything and get well-formatted answers (headings, lists, tables, code blocks).
+- Attach up to 3 files: images, PDFs, Word, PowerPoint, Excel, and common text and code files.
+- Live questions (news, prices, scores) use Google Search grounding, with sources listed.
+- Keeps its own conversation history, separate from Finance Manager.
+
+### Everything Else
+
+- **Chat history.** Pin, rename, reopen, and delete past conversations, saved in your Sheet.
+- **Voice dictation** wherever your browser supports it.
+- **Light and dark themes** with a glass-style interface, built for both phone and desktop.
+- **Automatic model fallback.** If one Gemini model is busy or out of quota, the next one answers.
+- **Pakistan-friendly.** Rupee formatting, `40k` style amounts, and Asia/Karachi dates.
+
+## How It Works
+
+```text
+   Your message
+        │
+        ▼
+ ┌──────────────┐   extracts type, amount,    ┌────────────────────┐
+ │ Google Gemini│ ──account, category, date──▶│  Validated against │
+ └──────────────┘                             │ your Accounts and  │
+                                              │ Categories tabs    │
+                                              └─────────┬──────────┘
+                                                        │
+                          missing something? ◀──────────┤
+                          ask with buttons              │ complete
+                                                        ▼
+                                              ┌────────────────────┐
+                                              │  Your Google Sheet │
+                                              └────────────────────┘
+```
+
+The AI only reads and classifies your message. It cannot invent an account or category: anything that does not match your Sheet is checked with you first.
+
+Expense Chat is a static, browser-based app. It talks directly to Google's APIs, with no Apps Script proxy and no custom server in between.
 
 ## Privacy & Data Ownership
 
-Expense Chat is designed around individual user accounts.
+- Your financial records live in **your** Google Sheet.
+- Chat history and budgets are kept in hidden tabs of that same Sheet.
+- **You** supply the Gemini API key. It is never sent to any server of ours.
+- Your Gemini key and Sheet ID are saved in this browser's local storage.
+- Google access tokens stay in memory only and are gone when you close the tab.
+- Sign-in uses the `drive.file` scope, so the app can only touch the Sheet you create or select, not your whole Drive.
 
-- Financial records are stored in the user's own Google Sheet.
-- Conversation history and budgets are stored in hidden spreadsheet tabs.
-- Each user provides their own Gemini API key.
-- The Gemini API key and selected spreadsheet ID are stored in browser local storage.
-- Google OAuth access tokens remain in JavaScript memory.
-- Google authentication requests the `drive.file` permission scope rather than unrestricted Drive access.
+> **Heads up:** local storage is not a vault. If your device is compromised, a saved API key could be exposed. Use trusted devices, and restrict your Gemini key in Google AI Studio if you can.
 
-**Important:** Browser local storage is not a secure credential vault. A compromised device or same-origin XSS vulnerability could expose a stored Gemini API key. Use trusted devices and protect your credentials.
+"Remove saved key and Sheet link" clears the browser's copy. It does not delete your Sheet.
 
-Removing saved credentials does not delete the spreadsheet or its existing records.
+## Quick Start (as a User)
 
-## Getting Started
+1. Open the [live app](https://ai-chat-expense-tracker.vercel.app/).
+2. **Connect your Google account.**
+3. Paste a free **Gemini API key** from [Google AI Studio](https://aistudio.google.com/apikey).
+4. Download the **template** from the app, upload it to Google Drive, and open it with Google Sheets.
+5. Press **Select my Google Sheet** and pick it.
+6. Start typing: `spent 300 on lunch from cash`.
+
+Your **Accounts** tab holds up to 10 accounts (rows 6 to 15), and your **Categories** tab up to 20 categories. Edit those two tabs and the app picks the changes up. Refresh the page if you add an account while the app is open.
+
+## Run It Yourself
 
 ### Requirements
 
-- Node.js 20 or newer
-- npm
-- Google Cloud project
-- Google OAuth 2.0 Web Client ID
-- Google Picker API key
-- Gemini API key
+- Node.js 20 or newer, and npm
+- A Google Cloud project with an OAuth 2.0 Web Client ID and a Picker API key
 
-### 1. Clone the repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/MDAhmed115/AI-Chat-Expense-Tracker.git
 cd AI-Chat-Expense-Tracker
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Configure environment variables
+### 2. Add environment variables
 
 Create `.env.local` in the project root:
 
@@ -130,93 +152,51 @@ VITE_GOOGLE_API_KEY=YOUR_GOOGLE_PICKER_API_KEY
 VITE_GOOGLE_PROJECT_NUMBER=YOUR_GOOGLE_CLOUD_PROJECT_NUMBER
 ```
 
-These values are public browser configuration, not private secrets. Never place an OAuth client secret or service-account key in a `VITE_` variable.
+These are public browser settings, not secrets. Never put an OAuth client secret or service-account key in a `VITE_` variable. Each user enters their own Gemini key inside the app.
 
-Each user enters their own Gemini API key inside the application.
+### 3. Configure Google Cloud
 
-### 4. Configure Google Cloud
+1. Enable the **Google Sheets API**, **Google Drive API**, and **Google Picker API**.
+2. Set up the OAuth consent screen and request the `drive.file` scope.
+3. Create an OAuth Client ID of type **Web application**.
+4. Add your origins to **Authorized JavaScript origins**:
+   - Local: `http://localhost:5173`
+   - Production: your deployed URL
+5. Create a Picker API key and restrict it by HTTP referrer and API.
 
-1. Enable Google Sheets API.
-2. Enable Google Drive API.
-3. Enable Google Picker API.
-4. Configure Google Auth Platform and the OAuth consent screen.
-5. Create an OAuth Client ID using the **Web application** type.
-6. Add your development and production URLs to Authorized JavaScript origins.
+Follow Google's current publishing and verification rules for your intended audience.
 
-For local development:
-
-```text
-http://localhost:5173
-```
-
-For the deployed application:
-
-```text
-https://ai-chat-expense-tracker.vercel.app
-```
-
-7. Configure the OAuth application for the `drive.file` scope.
-8. Create a Picker API key and restrict it by HTTP referrer and API access.
-
-Follow Google's current publishing and verification requirements for your intended audience.
-
-### 5. Run locally
+### 4. Run
 
 ```bash
-npm run dev
+npm run dev       # development at http://localhost:5173
+npm run build     # production build into dist/
+npm run preview   # preview the production build
 ```
 
-Open:
+### Deploy to Vercel
 
-```text
-http://localhost:5173
-```
+1. Import the repository into Vercel.
+2. Build command: `npm run build`. Output directory: `dist`.
+3. Add the three environment variables above.
+4. Add your Vercel domain to the Authorized JavaScript origins in Google Cloud.
+5. Deploy.
 
-### 6. Build for production
+`VITE_` variables are visible in the browser, so protect the Picker key with Google Cloud restrictions instead of relying on Vercel to hide it.
 
-```bash
-npm run build
-npm run preview
-```
+## Tech Stack
 
-The production build is generated inside `dist/`.
-
-## Deployment
-
-Expense Chat can be deployed through Vercel:
-
-1. Import the GitHub repository into Vercel.
-2. Set the build command to `npm run build`.
-3. Set the output directory to `dist`.
-4. Add the three environment variables listed above.
-5. Configure the deployed domain in Google Cloud.
-6. Deploy the project.
-
-Remember that `VITE_` variables are exposed in the browser. Restrict the Google API key through Google Cloud rather than treating Vercel environment-variable settings as a way to hide it.
-
-## Spreadsheet Template
-
-New users can create their own Expense Chat spreadsheet using the included Excel template:
-
-[`Finance_Tracker-template.xlsx`](./Finance_Tracker-template.xlsx)
-
-The application expects a compatible spreadsheet containing:
-
-- `Transactions`
-- `Accounts`
-- `Categories`
-
-Additional hidden tabs are used for conversation history and budgets.
-
-## Current Limitations
-
-- Clear confirmation currently supports clearing transaction rows, not accounts, categories, or budgets.
-- Monthly reports use printable HTML rather than direct PDF generation.
-- Receipt and statement extraction requires user review before saving.
-- Speech recognition depends on browser support.
-- Gemini model availability, quotas, and API policies are subject to Google's changes.
-
-Test with a separate Google account and spreadsheet before using the application as the sole record of important financial information.
+| Layer | Technology |
+|---|---|
+| Frontend | HTML, CSS, vanilla JavaScript |
+| Build tool | Vite |
+| AI | Google Gemini API (with model fallback and Google Search grounding) |
+| Database | Google Sheets API v4 |
+| Sign-in | Google Identity Services |
+| Sheet selection | Google Picker |
+| Sheet creation | Google Drive API v3 |
+| Office file reading | JSZip |
+| Hosting | Vercel |
 
 ## Project Structure
 
@@ -228,32 +208,36 @@ Test with a separate Google account and spreadsheet before using the application
 ├── vercel.json
 ├── .env.example
 ├── src/
-│   ├── app.js
-│   ├── cloud.js
-│   ├── main.js
-│   └── styles.css
+│   ├── main.js        # entry point
+│   ├── app.js         # interface: chat, cards, history, setup
+│   ├── cloud.js       # Google + Gemini logic, all data operations
+│   └── styles.css     # liquid-glass theme, light and dark
 ├── expense_chat_logo.jpg
 ├── logo.png
 └── Finance_Tracker-template.xlsx
 ```
 
+## Good to Know
+
+- Always glance at what the AI extracted before relying on it, especially for receipts and statements.
+- Receipt and statement import reads up to 30 transactions at a time, from one file of up to 4 MB.
+- Each saved conversation keeps its most recent 10 messages.
+- Monthly reports are printable HTML (use your browser's Print and Save as PDF).
+- `CONFIRM CLEAR` only clears transactions. Accounts, categories, and budgets are untouched.
+- Voice dictation depends on browser support.
+- Gemini model availability, quotas, and policies are controlled by Google and can change.
+
+Try it with a spare Google account and test Sheet first, before trusting it with records that matter.
+
 ## Contributing
 
-Suggestions, bug reports, and improvements are welcome.
+Bug reports and ideas are welcome. When reporting a bug, please include the steps to reproduce it, what you expected, what happened instead, your browser and OS, and any console errors.
 
-When reporting a bug, include:
-
-- Steps to reproduce the issue.
-- Expected behaviour.
-- Actual behaviour.
-- Browser and operating system.
-- Relevant console errors.
-
-**Never include API keys, access tokens, spreadsheet IDs, or personal financial information in an issue.**
+**Never include API keys, access tokens, Sheet IDs, or personal financial data in an issue.**
 
 ## License
 
-No license has currently been specified. Unless a license is added, the repository remains subject to default copyright rules. Public visibility does not automatically grant permission to reuse or redistribute the code.
+No license has been specified yet. Until one is added, default copyright applies: public visibility does not grant permission to reuse or redistribute the code.
 
 ---
 
@@ -261,7 +245,7 @@ No license has currently been specified. Unless a license is added, the reposito
 
   **Expense Chat**
 
-  *Track smarter. Stay in control.*
+  *Say it. Send it. Done.*
 
   Built by [Ahmed Ashfaq](https://github.com/MDAhmed115)
 
