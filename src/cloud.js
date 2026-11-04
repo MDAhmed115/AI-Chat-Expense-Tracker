@@ -437,7 +437,7 @@ function rangeFor(obj) {
 }
 
 async function appendTransaction(entry) {
-  const date = parseDateFromAi(entry);
+  const date = entry.date || parseDateFromAi(entry);
   const clean = value => /^[=+@-]/.test(String(value ?? '')) ? `'${String(value)}` : String(value ?? '');
   const row = [date, entry.type, clean(String(entry.description || '').slice(0, 60)), Number(entry.amount), clean(entry.category || ''), clean(entry.account || ''), clean(entry.to_account || ''), clean(entry.originalText || ''), entry.needsReview ? 'Yes' : '', new Date().toISOString()];
   const result = await valuesAppend('Transactions!A:J', [row]);
@@ -509,7 +509,7 @@ async function sendFinance(text) {
   try { parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { throw new Error('Gemini returned an invalid finance response. Please try rephrasing.'); }
   const decisions = Array.isArray(parsed) ? parsed : [parsed];
   const tx = await getTransactions();
-  const replies = []; const cards = [];
+  const replies = []; const cards = []; const clarifies = [];
   for (const d of decisions) {
     if (d.type === 'Unknown') { replies.push('I could not identify a finance transaction or query in that message.'); continue; }
     if (['QueryBalance', 'QueryTotal', 'QueryBreakdown'].includes(d.type)) {
@@ -520,10 +520,24 @@ async function sendFinance(text) {
     const account = lists.accounts.find(a => norm(a.name) === norm(d.account));
     const toAccount = d.type === 'Transfer' ? lists.accounts.find(a => norm(a.name) === norm(d.to_account)) : null;
     const category = d.type === 'Expense' ? lists.categories.find(c => norm(c) === norm(d.category)) : null;
-    if (!(amount > 0) || !account || (d.type === 'Transfer' && (!toAccount || norm(toAccount.name) === norm(account.name))) || (d.type === 'Expense' && !category)) {
-      const rowIndex = await appendTransaction({ ...d, originalText: text, needsReview: true, amount: amount > 0 ? amount : 0, account: account?.name || d.account || '', category: category || '' });
-      replies.push('I saved this entry for review because some details were missing or did not match your Sheet.');
-      cards.push({ status: 'review', type: d.type, amount: fmtRs(amount), account: account?.name || d.account || 'Unknown', category: category || 'Needs review', date: parseDateFromAi(d), rowIndex });
+    if (!(amount > 0)) {
+      replies.push('I could not find an amount in that message. Please include one, for example "200 fries from nayapay".');
+      continue;
+    }
+    const sameAcc = toAccount && account && norm(toAccount.name) === norm(account.name);
+    const missing = [];
+    if (!account) missing.push({ field: 'account', label: d.type === 'Transfer' ? 'From which account?' : 'Which account?', options: lists.accounts.map(a => a.name) });
+    if (d.type === 'Transfer' && (!toAccount || sameAcc)) missing.push({ field: 'to_account', label: 'To which account?', options: lists.accounts.map(a => a.name).filter(n => !account || norm(n) !== norm(account.name)) });
+    if (d.type === 'Expense' && !category) missing.push({ field: 'category', label: 'Which category?', options: lists.categories });
+    if (missing.length) {
+      const date = parseDateFromAi(d);
+      clarifies.push({
+        amountText: fmtRs(amount),
+        summary: `${d.type} · ${d.description || 'no description'} · ${date}`,
+        missing,
+        entry: { type: d.type, amount, description: d.description || '', date, originalText: text, account: account?.name || '', to_account: sameAcc ? '' : (toAccount?.name || ''), category: category || '' }
+      });
+      replies.push(`I need a detail before saving "${d.description || d.type}". Pick an option below, or keep it for review.`);
       continue;
     }
     const rowIndex = await appendTransaction({ ...d, account: account.name, to_account: toAccount?.name || '', category: category || '', originalText: text });
@@ -531,7 +545,24 @@ async function sendFinance(text) {
     replies.push(`${d.type} added: ${fmtRs(amount)} ${d.type === 'Expense' ? 'from' : d.type === 'Income' ? 'to' : 'from'} ${account.name}${d.type === 'Transfer' ? ' to ' + toAccount.name : ''}${category ? ' · ' + category : ''}.`);
     cards.push({ status: 'ok', type: d.type, amount: fmtRs(amount), account: account.name, category: category || (d.type === 'Transfer' ? 'Transfer' : 'Income'), date, rowIndex, actions: { edit: { rowIndex }, delete: { rowIndex } } });
   }
-  return { ok: true, kind: cards.some(c => c.status === 'review') ? 'review' : 'added', reply: replies.join('\n'), cards };
+  return { ok: true, kind: cards.some(c => c.status === 'review') ? 'review' : 'added', reply: replies.join('\n'), cards, clarifies };
+}
+
+async function saveClarified(entry, choices, review) {
+  const lists = await loadLists();
+  const e = { ...entry, ...(choices || {}) };
+  const amount = Number(e.amount) || 0;
+  const account = lists.accounts.find(a => norm(a.name) === norm(e.account));
+  const toAccount = lists.accounts.find(a => norm(a.name) === norm(e.to_account));
+  const category = lists.categories.find(c => norm(c) === norm(e.category));
+  if (!review) {
+    const bad = !(amount > 0) || !account || (e.type === 'Transfer' && (!toAccount || norm(toAccount.name) === norm(account.name))) || (e.type === 'Expense' && !category);
+    if (bad) return { ok: false, kind: 'error', reply: 'Those choices do not match your Sheet. Please try again.' };
+  }
+  const rowIndex = await appendTransaction({ ...e, amount, account: account?.name || '', to_account: toAccount?.name || '', category: category || '', needsReview: !!review });
+  const card = { status: review ? 'review' : 'ok', type: e.type, amount: fmtRs(amount), account: account?.name || 'Unknown', category: category || (review ? 'Needs review' : (e.type === 'Transfer' ? 'Transfer' : 'Income')), date: e.date, rowIndex };
+  if (!review) card.actions = { edit: { rowIndex }, delete: { rowIndex } };
+  return { ok: true, kind: review ? 'review' : 'added', reply: review ? 'Saved for review.' : `${e.type} added: ${fmtRs(amount)}${account ? ' · ' + account.name : ''}${category ? ' · ' + category : ''}.`, cards: [card] };
 }
 
 async function updateRow(rowIndex, changes) {
@@ -748,6 +779,7 @@ async function call(action, args = []) {
     case 'api_sendMessage': return sendFinance(String(args[0] || ''));
     case 'api_sendFinanceFile': return extractFinanceFile(String(args[0] || ''), args[1] || []);
     case 'api_saveExtracted': return saveExtracted(args[0]);
+    case 'api_saveClarified': return saveClarified(args[0], args[1], args[2]);
     case 'api_sendChat': return chatReply(String(args[0] || ''), args[1] || [], args[3] || []);
     case 'api_historyList': { const rows = await historyRows(); return { ok: true, chats: rows.sort((a,b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map(({id,mode,title,pinned}) => ({id,mode,title,pinned})) }; }
     case 'api_historyOpen': return historyAction('open', args[0]);
